@@ -1,0 +1,14 @@
+---
+- name: Update K3S.yaml File
+  hosts: localhost
+  gather_facts: false
+  vars:
+    load_balancer_ip: ""
+    first_setup: "true"
+  tasks:
+    - name: Primary - Update Kube Config With LB IP
+      when: first_setup == 'true'
+      replace:
+        path: "./k3s/k3s.yaml"
+        regexp: "127.0.0.1"
+        replace: "{{ load_balancer_ip }}"

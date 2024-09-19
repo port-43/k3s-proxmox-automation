@@ -1,0 +1,36 @@
+---
+- name: K3S Storage Setup
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    load_balancer_ip: ""
+  tasks:
+    - name: Storage - Get Control Plane Node Token
+      set_fact:
+        node_token: "{{ lookup('ansible.builtin.file', './k3s/node-token') }}"
+
+    - name: Storage - Install K3S Agent
+      shell:
+        executable: "/usr/bin/bash"
+        cmd: |
+          curl -sfL https://get.k3s.io | K3S_URL=https://{{ load_balancer_ip }}:6443 K3S_TOKEN={{ node_token }} sh -s - agent --node-taint StorageOnly=true:NoSchedule --node-label node-role=storage
+
+    - name: Create New ext4 Primary Partition
+      parted:
+        device: /dev/sdb
+        number: 1
+        state: present
+
+    - name: Create ext4 Filesystem on /dev/sdb
+      filesystem:
+        fstype: ext4
+        dev: /dev/sdb1
+
+    - name: Mount Filesystem to /var/longhorn
+      mount:
+        fstype: ext4
+        src: /dev/sdb1
+        path: /var/longhorn
+        state: mounted
+        boot: true

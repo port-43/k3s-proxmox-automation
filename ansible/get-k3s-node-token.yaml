@@ -1,0 +1,17 @@
+---
+- name: Get K3S Node Token
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Check if node-token File Exists
+      stat:
+        path: /var/lib/rancher/k3s/server/node-token
+      register: file_check
+
+    - name: Get Primary Control Plane Node Token
+      when: file_check.stat.exists
+      fetch:
+        src: /var/lib/rancher/k3s/server/node-token
+        dest: "./k3s/"
+        flat: true

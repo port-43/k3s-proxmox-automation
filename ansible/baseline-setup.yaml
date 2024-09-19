@@ -1,0 +1,64 @@
+---
+- name: Baseline Configuration
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Update Packages
+      apt:
+        name: "*"
+        state: latest
+
+    - name: Upgrade Packages
+      apt:
+        upgrade: dist
+
+    - name: Install Base Packages
+      apt:
+        name:
+          - open-iscsi
+          - nfs-common
+          - fail2ban
+          - net-tools
+        state: present
+
+    - name: Start Open-ISCSI Service
+      systemd:
+        name: open-iscsi.service
+        state: started
+
+    - name: Start ISCSID Daemon
+      systemd:
+        name: iscsid.service
+        state: started
+
+    - name: Set SSHD Jail Config
+      copy:
+        dest: /etc/fail2ban/jail.d/custom.local
+        content: |
+          [sshd]
+          mode = aggressive
+
+    - name: Start Fail2Ban Service
+      systemd:
+        name: fail2ban.service
+        state: started
+
+    - name: Harden SSHD Config
+      copy:
+        dest: /etc/ssh/sshd_config.d/custom-auth.conf
+        content: |
+          PasswordAuthentication no
+          PermitRootLogin no
+          ChallengeResponseAuthentication no
+          KerberosAuthentication no
+          GSSAPIAuthentication no
+          UsePAM no
+          PermitEmptyPasswords no
+
+          AllowUsers *@192.168.1.0/24
+
+    - name: Reload SSH Service
+      systemd:
+        name: ssh
+        state: reloaded

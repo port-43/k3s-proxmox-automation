@@ -1,0 +1,75 @@
+---
+- name: Nginx Setup
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    control_plane_ips: ""
+  tasks:
+    - name: Install Nginx
+      apt:
+        name:
+          - nginx
+          - libnginx-mod-stream
+        state: present
+
+    - name: Start Nginx Service
+      systemd:
+        name: nginx
+        state: started
+
+    - name: Format Nginx Server Var
+      set_fact:
+        nginx_servers: "{{ control_plane_ips.split(',') }}"
+
+    - name: Setup Nginx Conf
+      copy:
+        dest: /etc/nginx/nginx.conf
+        content: |
+          user www-data;
+          worker_processes auto;
+          pid /run/nginx.pid;
+          error_log /var/log/nginx/error.log;
+          include /etc/nginx/modules-enabled/*.conf;
+
+          events {
+                  worker_connections 768;
+                  # multi_accept on;
+          }
+
+          stream {
+              upstream k3s_servers {
+          {% for server in nginx_servers %}
+                  server {{ server }}:6443;
+          {% endfor %}
+              }
+
+              upstream backend {
+          {% for server in nginx_servers %}
+                  server {{ server }}:443;
+          {% endfor %}
+              }
+
+              log_format basic '$remote_addr - - [$time_local] $protocol $status $bytes_sent $bytes_received $session_time "$upstream_addr"';
+
+              server {
+                  listen 6443;
+                  proxy_pass k3s_servers;
+              }
+
+              server {
+                  listen 443;
+
+                  proxy_pass backend;
+                  access_log /var/log/nginx/https.access.log basic buffer=32k flush=1m;
+                  #proxy_protocol on;
+                  #proxy_set_header Host $http_host;
+                  #proxy_set_header X-Forwarded-For $remote_addr;
+              }
+          }
+
+    - name: Restart Nginx Daemon
+      shell:
+        cmd: |
+          nginx -s reload
+

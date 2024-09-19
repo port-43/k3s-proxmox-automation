@@ -1,0 +1,51 @@
+---
+- name: K3S Hive Setup
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    postgres_username: ""
+    postgres_password: ""
+    postgres_host: ""
+    database_name: ""
+    load_balancer_ip: ""
+    first_setup: "true"
+  tasks:
+    - name: Setup K3S Datastore Endpoint
+      set_fact:
+        k3s_datastore_endpoint: "postgres://{{ postgres_username }}:{{ postgres_password }}@{{ postgres_host}}:5432/{{ database_name }}"
+
+    - name: Primary - Install Primary Control Plane Node
+      when: first_setup == 'true'
+      shell:
+        executable: "/usr/bin/bash"
+        cmd: |
+          export K3S_DATASTORE_ENDPOINT={{ k3s_datastore_endpoint }}
+          curl -sfL https://get.k3s.io | sh -s - server --node-taint CriticalAddonsOnly=true:NoExecute --tls-san {{ load_balancer_ip }} --secrets-encryption --node-label node-role=control-plane
+
+    - name: Primary - Get Primary Control Plane Node Token
+      when: first_setup == 'true'
+      fetch:
+        src: /var/lib/rancher/k3s/server/node-token
+        dest: "./k3s/"
+        flat: true
+
+    - name: Primary - Get Kube Config
+      when: first_setup == 'true'
+      fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: "./k3s/"
+        flat: true
+
+    - name: Ancillary - Get Primary Control Plane Node Token
+      when: first_setup == 'false'
+      set_fact:
+        node_token: "{{ lookup('ansible.builtin.file', './k3s/node-token') }}"
+
+    - name: Ancillary - Install Ancillary Control Plane Node
+      when: first_setup == 'false'
+      shell:
+        executable: "/usr/bin/bash"
+        cmd: |
+          export K3S_DATASTORE_ENDPOINT={{ k3s_datastore_endpoint }}
+          curl -sfL https://get.k3s.io | sh -s - server --token={{ node_token }} --node-taint CriticalAddonsOnly=true:NoExecute --tls-san {{ load_balancer_ip }} --secrets-encryption --node-label node-role=control-plane

@@ -1,0 +1,17 @@
+---
+- name: K3S Drone Setup
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    load_balancer_ip: ""
+  tasks:
+    - name: Worker - Get Control Plane Node Token
+      set_fact:
+        node_token: "{{ lookup('ansible.builtin.file', './k3s/node-token') }}"
+
+    - name: Worker - Install K3S Agent
+      shell:
+        executable: "/usr/bin/bash"
+        cmd: |
+          curl -sfL https://get.k3s.io | K3S_URL=https://{{ load_balancer_ip }}:6443 K3S_TOKEN={{ node_token }} sh -s - agent --node-label node-role=worker
